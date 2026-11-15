@@ -32,7 +32,34 @@ export const BUMP_DISTANCE = 0.14;
 /** Distance minimale (px CSS) pour qu'un glissement compte comme un swipe. */
 export const SWIPE_MIN_PX = 24;
 
+// ─── Temps musical ──────────────────────────────────────────────────────────
+
+/** Doubles croches par temps (le séquenceur a 16 steps par mesure). */
+export const STEPS_PER_BEAT = 4;
+export const BEATS_PER_BAR = 4;
+
+/** Horizon de planification audio (« A Tale of Two Clocks »). */
+export const SCHEDULE_AHEAD_MS = 100;
+
+/** Période du tick de planification (Web Worker, insensible au throttling des onglets). */
+export const SCHEDULER_TICK_MS = 25;
+
+/** Un step plus en retard que ça (onglet suspendu…) est sauté plutôt que joué en vrac. */
+export const LATE_STEP_TOLERANCE_MS = 20;
+
+/** Délai entre le démarrage de l'audio et le premier temps (laisse le scheduler prendre de l'avance). */
+export const AUDIO_START_DELAY_MS = 150;
+
+/** Compensation de latence audio choisie par l'utilisateur (réglée par la calibration à l'étape 10). */
+export const DEFAULT_LATENCY_OFFSET_MS = 0;
+
 // ─── Rendu ──────────────────────────────────────────────────────────────────
+
+/** Le damier « respire » sur chaque kick : échelle 1 → 1 + PULSE_SCALE. */
+export const PULSE_SCALE = 0.03;
+
+/** Constante de décroissance de la pulsation du kick. */
+export const PULSE_DECAY_MS = 140;
 
 /** Taille du damier en fraction du plus petit côté de l'écran. */
 export const BOARD_SCREEN_RATIO = 0.62;

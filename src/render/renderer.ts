@@ -1,4 +1,4 @@
-import { BOARD_SCREEN_RATIO, BUMP_DISTANCE, GRID_SIZE, MAX_DPR } from '../config';
+import { BOARD_SCREEN_RATIO, BUMP_DISTANCE, GRID_SIZE, MAX_DPR, PULSE_SCALE } from '../config';
 import { DIR_VECTORS } from '../game/grid';
 import type { PlayerView } from '../game/player';
 import { FONT_FAMILY, type Palette, PALETTE_LEVEL1 } from './palette';
@@ -6,6 +6,10 @@ import { FONT_FAMILY, type Palette, PALETTE_LEVEL1 } from './palette';
 /** Tout ce que le rendu doit savoir pour dessiner une frame. */
 export interface FrameView {
   player: PlayerView;
+  /** Pulsation du kick, 1 au moment du coup puis décroissance vers 0. */
+  pulse: number;
+  /** L'audio a-t-il démarré ? (sinon : écran « appuie sur une touche »). */
+  audioStarted: boolean;
 }
 
 /**
@@ -50,16 +54,27 @@ export class Renderer {
     const ox = (this.width - board) / 2;
     const oy = (this.height - board) / 2;
 
-    this.drawGrid(ox, oy, cell);
+    // Le damier « respire » sur le kick : zoom autour du centre de l'écran.
+    const scale = 1 + PULSE_SCALE * view.pulse;
+    ctx.save();
+    ctx.translate(this.width / 2, this.height / 2);
+    ctx.scale(scale, scale);
+    ctx.translate(-this.width / 2, -this.height / 2);
+    this.drawGrid(ox, oy, cell, view.pulse);
     this.drawBumpFlash(view.player, ox, oy, board);
     this.drawPlayer(view.player, ox, oy, cell);
+    ctx.restore();
 
-    // Aide temporaire (étape 1).
-    ctx.fillStyle = palette.textDim;
-    ctx.font = `400 13px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText('FLÈCHES · ZQSD · WASD · SWIPE', this.width / 2, this.height - 24);
+    if (!view.audioStarted) {
+      ctx.fillStyle = palette.text;
+      ctx.font = `700 ${Math.round(Math.min(this.width, this.height) * 0.035)}px ${FONT_FAMILY}`;
+      ctx.fillText('APPUIE SUR UNE TOUCHE', this.width / 2, oy - cell * 0.6);
+    }
+    ctx.fillStyle = palette.textDim;
+    ctx.font = `400 13px ${FONT_FAMILY}`;
+    ctx.fillText('FLÈCHES · ZQSD · WASD · SWIPE   —   F1 : DEBUG', this.width / 2, this.height - 24);
   }
 
   private drawBackground(): void {
@@ -74,7 +89,7 @@ export class Renderer {
   }
 
   /** Toutes les cases dans un seul chemin → un seul passage de flou (shadowBlur coûte cher). */
-  private drawGrid(ox: number, oy: number, cell: number): void {
+  private drawGrid(ox: number, oy: number, cell: number, pulse: number): void {
     const { ctx, palette } = this;
     const gap = cell * 0.09;
     const size = cell - gap;
@@ -91,10 +106,11 @@ export class Renderer {
 
     ctx.save();
     ctx.strokeStyle = palette.grid;
-    ctx.globalAlpha = 0.75;
-    ctx.lineWidth = Math.max(1, cell * 0.018);
+    // Le kick fait aussi briller les bords.
+    ctx.globalAlpha = 0.6 + 0.4 * pulse;
+    ctx.lineWidth = Math.max(1, cell * (0.018 + 0.01 * pulse));
     ctx.shadowColor = palette.grid;
-    ctx.shadowBlur = cell * 0.12;
+    ctx.shadowBlur = cell * (0.1 + 0.15 * pulse);
     ctx.stroke();
     ctx.restore();
   }
