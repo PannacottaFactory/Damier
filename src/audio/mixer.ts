@@ -1,18 +1,27 @@
 /**
  * Graphe de mixage :
  *
- *   kick ─► kickBus [drive → saturation] ─┐
- *   hats / snare ─────────────────────────┼─► drums ─┐
- *   basse / lead (étape 3) ──────────────► music ────┼─► masterFilter (passe-bas, coupure à la mort)
- *                                                    └─► compresseur ─► master ─► sortie
+ *   kick ─► kickBus [drive → saturation] ──┐
+ *   hats / snare / fx ─────────────────────┼─► drums ─────────────────────────┐
+ *   basse ─► bassBus ─┐                    │                                  │
+ *   lead ──► leadBus ─┼─► sidechain ─► musicFilter ─► music ──────────────────┼─► masterFilter ─► compresseur ─► master ─► sortie
+ *            └─► delay (synchro tempo, feedback filtré) ─┘                    │   (passe-bas : coupure à la mort)
+ *
+ * - sidechain : le volume de la musique plonge à chaque kick (pompage électro).
+ * - musicFilter : automation par section (le filtre qui s'ouvre pendant le BUILD).
  */
 export class Mixer {
   readonly kickBus: GainNode;
   readonly drums: GainNode;
+  readonly bassBus: GainNode;
+  readonly leadBus: GainNode;
+  readonly sidechain: GainNode;
+  readonly musicFilter: BiquadFilterNode;
   readonly music: GainNode;
   readonly masterFilter: BiquadFilterNode;
   readonly compressor: DynamicsCompressorNode;
   readonly master: GainNode;
+  private readonly delay: DelayNode;
 
   constructor(readonly ctx: AudioContext) {
     this.master = new GainNode(ctx, { gain: 0.8 });
@@ -31,16 +40,56 @@ export class Mixer {
     this.masterFilter = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 20000, Q: 0.7 });
     this.masterFilter.connect(this.compressor);
 
+    // ─── Batterie ───
     this.drums = new GainNode(ctx, { gain: 1 });
     this.drums.connect(this.masterFilter);
-    this.music = new GainNode(ctx, { gain: 1 });
-    this.music.connect(this.masterFilter);
-
     // Le kick passe par une légère saturation (harmoniques → il « perce » aussi sur petits haut-parleurs).
     this.kickBus = new GainNode(ctx, { gain: 1.6 });
     const shaper = new WaveShaperNode(ctx, { curve: saturationCurve(2.2), oversample: '2x' });
     const post = new GainNode(ctx, { gain: 0.75 });
     this.kickBus.connect(shaper).connect(post).connect(this.drums);
+
+    // ─── Musique ───
+    this.music = new GainNode(ctx, { gain: 1 });
+    this.music.connect(this.masterFilter);
+    this.musicFilter = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 18000, Q: 1.2 });
+    this.musicFilter.connect(this.music);
+    this.sidechain = new GainNode(ctx, { gain: 1 });
+    this.sidechain.connect(this.musicFilter);
+
+    this.bassBus = new GainNode(ctx, { gain: 1 });
+    this.bassBus.connect(this.sidechain);
+    this.leadBus = new GainNode(ctx, { gain: 1 });
+    this.leadBus.connect(this.sidechain);
+
+    // Delay synchronisé (croche pointée) avec feedback filtré : les répétitions s'assombrissent.
+    this.delay = new DelayNode(ctx, { maxDelayTime: 2, delayTime: 0.35 });
+    const send = new GainNode(ctx, { gain: 0.32 });
+    const feedback = new GainNode(ctx, { gain: 0.38 });
+    const damp = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 2800 });
+    this.leadBus.connect(send).connect(this.delay);
+    this.delay.connect(damp).connect(feedback).connect(this.delay);
+    damp.connect(this.sidechain);
+  }
+
+  /** Cale le delay sur le tempo : croche pointée = 3/4 de temps. */
+  syncDelay(bpm: number, time: number): void {
+    this.delay.delayTime.setTargetAtTime((0.75 * 60) / bpm, time, 0.05);
+  }
+
+  /** Sidechain simulé : la musique plonge sur le kick puis remonte. */
+  duck(time: number, velocity: number): void {
+    const g = this.sidechain.gain;
+    g.setTargetAtTime(1 - 0.75 * velocity, time, 0.003);
+    g.setTargetAtTime(1, time + 0.045, 0.07);
+  }
+
+  /** Automation du filtre de la musique entre deux dates (interpolation exponentielle). */
+  rampMusicFilter(fromHz: number, toHz: number, start: number, end: number): void {
+    const f = this.musicFilter.frequency;
+    f.cancelScheduledValues(start);
+    f.setValueAtTime(fromHz, start);
+    if (toHz !== fromHz) f.exponentialRampToValueAtTime(toHz, end);
   }
 }
 

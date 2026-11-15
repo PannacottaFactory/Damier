@@ -34,6 +34,10 @@ export class DebugOverlay {
     document.body.appendChild(this.el);
   }
 
+  get isVisible(): boolean {
+    return this.visible;
+  }
+
   toggle(): void {
     this.visible = !this.visible;
     this.el.style.display = this.visible ? 'block' : 'none';

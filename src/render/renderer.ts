@@ -10,6 +10,7 @@ export interface FrameView {
   pulse: number;
   /** L'audio a-t-il démarré ? (sinon : écran « appuie sur une touche »). */
   audioStarted: boolean;
+  paused: boolean;
 }
 
 /**
@@ -74,7 +75,28 @@ export class Renderer {
     }
     ctx.fillStyle = palette.textDim;
     ctx.font = `400 13px ${FONT_FAMILY}`;
-    ctx.fillText('FLÈCHES · ZQSD · WASD · SWIPE   —   F1 : DEBUG', this.width / 2, this.height - 24);
+    ctx.fillText('FLÈCHES · ZQSD · WASD · SWIPE   —   ÉCHAP / P : PAUSE   —   F1 : DEBUG', this.width / 2, this.height - 24);
+
+    if (view.paused) this.drawPause();
+  }
+
+  private drawPause(): void {
+    const { ctx, palette, width: w, height: h } = this;
+    ctx.fillStyle = 'rgba(3, 4, 10, 0.72)';
+    ctx.fillRect(0, 0, w, h);
+    const size = Math.round(Math.min(w, h) * 0.08);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.save();
+    ctx.fillStyle = palette.text;
+    ctx.shadowColor = palette.grid;
+    ctx.shadowBlur = size * 0.4;
+    ctx.font = `800 ${size}px ${FONT_FAMILY}`;
+    ctx.fillText('PAUSE', w / 2, h / 2);
+    ctx.restore();
+    ctx.fillStyle = palette.textDim;
+    ctx.font = `400 ${Math.round(size * 0.22)}px ${FONT_FAMILY}`;
+    ctx.fillText('ÉCHAP · P · CLIC SUR ▶ POUR REPRENDRE', w / 2, h / 2 + size * 0.9);
   }
 
   private drawBackground(): void {

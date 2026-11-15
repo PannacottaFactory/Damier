@@ -25,7 +25,7 @@ export class AudioEngine {
     this.mixer = new Mixer(this.ctx);
     this.clock = new Clock(this.ctx, song.bpm);
     this.scheduler = new Scheduler(this.ctx, this.clock.tempo);
-    this.sequencer = new Sequencer(this.mixer, this.timeline, song);
+    this.sequencer = new Sequencer(this.mixer, this.timeline, this.clock.tempo, song);
     this.scheduler.onStep((step, time) => this.sequencer.playStep(step, time));
   }
 
@@ -41,6 +41,32 @@ export class AudioEngine {
     await this.ctx.resume();
     this.clock.start(this.ctx.currentTime + AUDIO_START_DELAY_MS / 1000, this.song.bpm);
     this.scheduler.start(0);
+  }
+
+  /** L'utilisateur a lancé l'audio (même si l'on est en pause). */
+  get hasStarted(): boolean {
+    return this.started;
+  }
+
+  get isPaused(): boolean {
+    return this.paused;
+  }
+
+  private paused = false;
+
+  /**
+   * Pause : on suspend l'AudioContext. Son temps s'arrête, donc la musique, les dangers
+   * planifiés et l'animation se figent ensemble, et reprennent exactement au même point.
+   */
+  async setPaused(paused: boolean): Promise<void> {
+    if (!this.started || paused === this.paused) return;
+    this.paused = paused;
+    if (paused) {
+      await this.ctx.suspend();
+    } else {
+      await this.ctx.resume();
+      this.clock.resync();
+    }
   }
 
   /** Une fois par frame : recale l'horloge perçue, complète la planification, purge la timeline. */

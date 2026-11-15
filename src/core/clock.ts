@@ -177,9 +177,19 @@ export class Clock implements TimeSource {
     }
   }
 
-  /** Temps perçu : l'instant audio que le joueur entend en ce moment. */
+  /** Dernière valeur de now() pendant que l'audio tournait (sert à figer le temps en pause). */
+  private frozenNow = 0;
+
+  /**
+   * Temps perçu : l'instant audio que le joueur entend en ce moment.
+   * Audio suspendu (pause) → le temps est figé : tout le jeu s'arrête avec la musique.
+   * À la reprise, `sync()` détecte le saut et recale le décalage.
+   */
   now(): number {
-    return performance.now() / 1000 + this.offset - this.latencyOffset;
+    if (this.synced && !this.running) return this.frozenNow;
+    if (!this.synced) this.sync();
+    this.frozenNow = performance.now() / 1000 + this.offset - this.latencyOffset;
+    return this.frozenNow;
   }
 
   /** Beat perçu courant. */
@@ -189,6 +199,12 @@ export class Clock implements TimeSource {
 
   bpm(): number {
     return this.tempo.bpmAtTime(this.now());
+  }
+
+  /** Force un recalage complet au prochain appel (reprise après pause). */
+  resync(): void {
+    this.synced = false;
+    this.sync();
   }
 
   /** Démarre le morceau : le beat 0 tombera à `startTime` (temps audio). */
