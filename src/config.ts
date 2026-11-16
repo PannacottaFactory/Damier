@@ -53,6 +53,33 @@ export const AUDIO_START_DELAY_MS = 150;
 /** Compensation de latence audio choisie par l'utilisateur (réglée par la calibration à l'étape 10). */
 export const DEFAULT_LATENCY_OFFSET_MS = 0;
 
+// ─── Dangers ────────────────────────────────────────────────────────────────
+
+/** Télégraphie : durée de l'avertissement avant l'impact, en temps (niveau 1 ; par niveau à l'étape 9). */
+export const WARN_BEATS = 2;
+
+/** Durée de l'impact (case mortelle), en temps. */
+export const IMPACT_BEATS = 0.25;
+
+/** Durée du fondu après l'impact (purement visuel, inoffensif). */
+export const FADE_BEATS = 0.5;
+
+// ─── Équité (modèle du joueur humain utilisé par isSurvivable) ──────────────
+
+/** Temps de réaction : délai entre l'apparition d'un avertissement et le premier déplacement possible. */
+export const REACTION_MS = 180;
+
+/** Coût d'un déplacement pour un humain qui enchaîne (appui + tween), en ms. */
+export const MOVE_COST_MS = 130;
+
+// ─── Director (provisoire, enrichi à l'étape 5) ─────────────────────────────
+
+/** Mesures de répit après un (re)départ avant le premier pattern. */
+export const FIRST_PATTERN_DELAY_BARS = 2;
+
+/** On engage un pattern un peu avant le début de son avertissement, pour qu'il s'affiche pile à temps. */
+export const COMMIT_AHEAD_BEATS = 0.25;
+
 // ─── Rendu ──────────────────────────────────────────────────────────────────
 
 /** Le damier « respire » sur chaque kick : échelle 1 → 1 + PULSE_SCALE. */

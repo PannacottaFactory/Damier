@@ -1,5 +1,6 @@
 import { BOARD_SCREEN_RATIO, BUMP_DISTANCE, GRID_SIZE, MAX_DPR, PULSE_SCALE } from '../config';
 import { DIR_VECTORS } from '../game/grid';
+import type { CellDanger } from '../game/hazards';
 import type { PlayerView } from '../game/player';
 import { FONT_FAMILY, type Palette, PALETTE_LEVEL1 } from './palette';
 
@@ -11,6 +12,13 @@ export interface FrameView {
   /** L'audio a-t-il démarré ? (sinon : écran « appuie sur une touche »). */
   audioStarted: boolean;
   paused: boolean;
+  /** Beat courant (sert au clignotement des avertissements, calé sur la musique). */
+  beat: number;
+  /** État de danger de chaque case (tableau à plat). */
+  cells: readonly CellDanger[];
+  /** Mort : le joueur est affiché touché, avec l'invitation à rejouer. */
+  dead: boolean;
+  invincible: boolean;
 }
 
 /**
@@ -62,22 +70,92 @@ export class Renderer {
     ctx.scale(scale, scale);
     ctx.translate(-this.width / 2, -this.height / 2);
     this.drawGrid(ox, oy, cell, view.pulse);
+    this.drawHazards(view.cells, view.beat, ox, oy, cell);
     this.drawBumpFlash(view.player, ox, oy, board);
-    this.drawPlayer(view.player, ox, oy, cell);
+    this.drawPlayer(view.player, ox, oy, cell, view.dead, view.invincible);
     ctx.restore();
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
+    const big = Math.round(Math.min(this.width, this.height) * 0.035);
     if (!view.audioStarted) {
       ctx.fillStyle = palette.text;
-      ctx.font = `700 ${Math.round(Math.min(this.width, this.height) * 0.035)}px ${FONT_FAMILY}`;
+      ctx.font = `700 ${big}px ${FONT_FAMILY}`;
       ctx.fillText('APPUIE SUR UNE TOUCHE', this.width / 2, oy - cell * 0.6);
+    } else if (view.dead) {
+      ctx.fillStyle = palette.danger;
+      ctx.font = `800 ${big}px ${FONT_FAMILY}`;
+      ctx.fillText('TOUCHÉ', this.width / 2, oy - cell * 0.6);
+      ctx.fillStyle = palette.text;
+      ctx.font = `400 ${Math.round(big * 0.55)}px ${FONT_FAMILY}`;
+      ctx.fillText('ESPACE POUR REJOUER', this.width / 2, oy + board + cell * 0.75);
     }
     ctx.fillStyle = palette.textDim;
     ctx.font = `400 13px ${FONT_FAMILY}`;
     ctx.fillText('FLÈCHES · ZQSD · WASD · SWIPE   —   ÉCHAP / P : PAUSE   —   F1 : DEBUG', this.width / 2, this.height - 24);
 
     if (view.paused) this.drawPause();
+  }
+
+  /**
+   * Dangers :
+   * - AVERTISSEMENT : contour rouge qui clignote sur les croches (calé sur le beat),
+   *   plus un remplissage qui monte au fil du compte à rebours ;
+   * - IMPACT : case pleine, rouge vif, gros halo ;
+   * - DISSIPATION : fondu.
+   */
+  private drawHazards(cells: readonly CellDanger[], beat: number, ox: number, oy: number, cell: number): void {
+    const { ctx, palette } = this;
+    const gap = cell * 0.09;
+    const radius = cell * 0.06;
+    // Clignotement : pic sur chaque croche.
+    const blink = 0.5 + 0.5 * Math.cos(2 * Math.PI * beat * 2);
+
+    ctx.save();
+    ctx.shadowColor = palette.danger;
+    for (let i = 0; i < cells.length; i++) {
+      const s = cells[i];
+      if (s.warn === 0 && s.impact === 0) continue;
+      const x = ox + (i % GRID_SIZE) * cell;
+      const y = oy + Math.floor(i / GRID_SIZE) * cell;
+
+      if (s.impact > 0) {
+        // Explosion : la case déborde un peu et brille fort.
+        const grow = cell * 0.04 * s.impact;
+        ctx.globalAlpha = Math.min(1, s.impact * 1.1);
+        ctx.fillStyle = palette.danger;
+        ctx.shadowBlur = cell * 0.6 * s.impact;
+        ctx.beginPath();
+        ctx.roundRect(x + gap / 2 - grow, y + gap / 2 - grow, cell - gap + grow * 2, cell - gap + grow * 2, radius);
+        ctx.fill();
+        // Cœur blanc au tout début de l'impact : c'est le « flash ».
+        if (s.impact > 0.85) {
+          ctx.globalAlpha = (s.impact - 0.85) / 0.15;
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowBlur = 0;
+          const inset = cell * 0.22;
+          ctx.fillRect(x + inset, y + inset, cell - inset * 2, cell - inset * 2);
+        }
+      }
+      if (s.warn > 0) {
+        const inset = gap / 2 + cell * 0.02;
+        const size = cell - inset * 2;
+        // Remplissage qui monte avec le compte à rebours.
+        ctx.globalAlpha = 0.06 + 0.22 * s.warn;
+        ctx.fillStyle = palette.danger;
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.roundRect(x + inset, y + inset, size, size, radius);
+        ctx.fill();
+        // Contour pulsé, de plus en plus épais à l'approche de l'impact.
+        ctx.globalAlpha = 0.45 + 0.55 * blink;
+        ctx.strokeStyle = palette.danger;
+        ctx.lineWidth = Math.max(1.5, cell * (0.025 + 0.035 * s.warn));
+        ctx.shadowBlur = cell * 0.25 * blink;
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   private drawPause(): void {
@@ -169,7 +247,7 @@ export class Renderer {
     ctx.restore();
   }
 
-  private drawPlayer(p: PlayerView, ox: number, oy: number, cell: number): void {
+  private drawPlayer(p: PlayerView, ox: number, oy: number, cell: number, dead: boolean, invincible: boolean): void {
     const { ctx, palette } = this;
     const cx = ox + (p.x + 0.5) * cell;
     const cy = oy + (p.y + 0.5) * cell;
@@ -193,12 +271,19 @@ export class Renderer {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(sx, sy);
-    ctx.shadowColor = palette.playerGlow;
+    // Mort : carré noir cerclé de rouge (l'éclatement en fragments arrive à l'étape 6).
+    ctx.shadowColor = dead ? palette.danger : palette.playerGlow;
     ctx.shadowBlur = cell * 0.35;
-    ctx.fillStyle = palette.player;
+    ctx.fillStyle = dead ? palette.bg : palette.player;
     ctx.beginPath();
     ctx.roundRect(-size / 2, -size / 2, size, size, size * 0.12);
     ctx.fill();
+    if (dead || invincible) {
+      ctx.strokeStyle = dead ? palette.danger : palette.playerGlow;
+      ctx.lineWidth = Math.max(2, cell * 0.04);
+      ctx.setLineDash(invincible && !dead ? [size * 0.15, size * 0.1] : []);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 }

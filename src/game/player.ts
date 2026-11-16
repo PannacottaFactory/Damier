@@ -48,6 +48,9 @@ export class Player {
   private moveStart = -Infinity;
   private readonly queue: Dir[] = [];
   private bump: Bump | null = null;
+  /** Derniers déplacements (pour connaître la case occupée à un instant passé précis). */
+  private history: { start: number; from: Cell; to: Cell }[] = [];
+  private origin: Cell;
 
   private readonly tween = MOVE_TWEEN_MS / 1000;
   private readonly bumpDuration = BUMP_MS / 1000;
@@ -55,16 +58,19 @@ export class Player {
   constructor(start: Cell = CENTER) {
     this.from = { ...start };
     this.to = { ...start };
+    this.origin = { ...start };
   }
 
   /** Replace le joueur sur une case, sans animation, et vide le buffer. */
   reset(cell: Cell = CENTER): void {
     this.from = { ...cell };
     this.to = { ...cell };
+    this.origin = { ...cell };
     this.moveDir = null;
     this.moveStart = -Infinity;
     this.queue.length = 0;
     this.bump = null;
+    this.history = [];
   }
 
   private get moveEnd(): number {
@@ -110,6 +116,20 @@ export class Player {
     this.to = target;
     this.moveDir = dir;
     this.moveStart = t;
+    this.history.push({ start: t, from: this.from, to: target });
+    if (this.history.length > 16) this.history.shift();
+  }
+
+  /**
+   * Case occupée (au sens des collisions) à un instant `t`, éventuellement passé :
+   * permet de tester la position exacte au début d'un impact, indépendamment du framerate.
+   */
+  cellAt(t: number): Cell {
+    for (let i = this.history.length - 1; i >= 0; i--) {
+      const h = this.history[i];
+      if (h.start <= t) return (t - h.start) / this.tween >= HITBOX_SWITCH_RATIO - 1e-9 ? h.to : h.from;
+    }
+    return this.history.length > 0 ? this.history[0].from : this.origin;
   }
 
   /** Progression du tween courant (0→1, 1 si immobile). */
@@ -123,7 +143,7 @@ export class Player {
    * Hitbox indulgente : on ne bascule sur la case d'arrivée qu'à mi-tween.
    */
   logicalCell(now: number): Cell {
-    return this.progress(now) >= HITBOX_SWITCH_RATIO ? this.to : this.from;
+    return this.progress(now) >= HITBOX_SWITCH_RATIO - 1e-9 ? this.to : this.from;
   }
 
   /** Case de destination (où le joueur sera une fois le tween fini). */
