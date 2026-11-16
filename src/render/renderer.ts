@@ -70,7 +70,7 @@ export class Renderer {
     ctx.scale(scale, scale);
     ctx.translate(-this.width / 2, -this.height / 2);
     this.drawGrid(ox, oy, cell, view.pulse);
-    this.drawHazards(view.cells, view.beat, ox, oy, cell);
+    this.drawHazards(view.cells, ox, oy, cell);
     this.drawBumpFlash(view.player, ox, oy, board);
     this.drawPlayer(view.player, ox, oy, cell, view.dead, view.invincible);
     ctx.restore();
@@ -99,23 +99,23 @@ export class Renderer {
 
   /**
    * Dangers :
-   * - AVERTISSEMENT : contour rouge qui clignote sur les croches (calé sur le beat),
-   *   plus un remplissage qui monte au fil du compte à rebours ;
+   * - AVERTISSEMENT : contour rouge fixe, et un carré qui grandit depuis le centre de la case ;
+   *   l'impact tombe quand il la recouvre entièrement. Seul le prochain impact est affiché
+   *   en plein ; les suivants n'ont qu'un fin contour discret ;
+   * - FANTÔME (call & response) : simple flash de contour blanc, inoffensif ;
    * - IMPACT : case pleine, rouge vif, gros halo ;
    * - DISSIPATION : fondu.
    */
-  private drawHazards(cells: readonly CellDanger[], beat: number, ox: number, oy: number, cell: number): void {
+  private drawHazards(cells: readonly CellDanger[], ox: number, oy: number, cell: number): void {
     const { ctx, palette } = this;
     const gap = cell * 0.09;
     const radius = cell * 0.06;
-    // Clignotement : pic sur chaque croche.
-    const blink = 0.5 + 0.5 * Math.cos(2 * Math.PI * beat * 2);
 
     ctx.save();
     ctx.shadowColor = palette.danger;
     for (let i = 0; i < cells.length; i++) {
       const s = cells[i];
-      if (s.warn === 0 && s.impact === 0) continue;
+      if (s.warn === 0 && s.impact === 0 && s.later === 0 && s.ghost === 0) continue;
       const x = ox + (i % GRID_SIZE) * cell;
       const y = oy + Math.floor(i / GRID_SIZE) * cell;
 
@@ -137,21 +137,62 @@ export class Renderer {
           ctx.fillRect(x + inset, y + inset, cell - inset * 2, cell - inset * 2);
         }
       }
-      if (s.warn > 0) {
-        const inset = gap / 2 + cell * 0.02;
+      if (s.later > 0 && s.warn === 0) {
+        // Avertissement d'un impact ultérieur : pointillés francs + léger voile, sans le carré
+        // qui se remplit (réservé au prochain impact). Ils se renforcent à l'approche.
+        const inset = gap / 2 + cell * 0.04;
         const size = cell - inset * 2;
-        // Remplissage qui monte avec le compte à rebours.
-        ctx.globalAlpha = 0.06 + 0.22 * s.warn;
-        ctx.fillStyle = palette.danger;
         ctx.shadowBlur = 0;
+        ctx.globalAlpha = 0.08 + 0.1 * s.later;
+        ctx.fillStyle = palette.danger;
         ctx.beginPath();
         ctx.roundRect(x + inset, y + inset, size, size, radius);
         ctx.fill();
-        // Contour pulsé, de plus en plus épais à l'approche de l'impact.
-        ctx.globalAlpha = 0.45 + 0.55 * blink;
+        ctx.globalAlpha = 0.55 + 0.35 * s.later;
         ctx.strokeStyle = palette.danger;
-        ctx.lineWidth = Math.max(1.5, cell * (0.025 + 0.035 * s.warn));
-        ctx.shadowBlur = cell * 0.25 * blink;
+        ctx.lineWidth = Math.max(2, cell * 0.035);
+        ctx.setLineDash([size * 0.12, size * 0.08]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      if (s.ghost > 0) {
+        // Fantôme : le « call » montre où ça tombera, sans danger.
+        const inset = gap / 2;
+        ctx.globalAlpha = s.ghost * 0.9;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = Math.max(1.5, cell * 0.04);
+        ctx.shadowColor = '#ffffff';
+        ctx.shadowBlur = cell * 0.3 * s.ghost;
+        ctx.beginPath();
+        ctx.roundRect(x + inset, y + inset, cell - inset * 2, cell - inset * 2, radius);
+        ctx.stroke();
+        ctx.shadowColor = palette.danger;
+      }
+      if (s.warn > 0) {
+        // Télégraphie « qui se remplit » : contour fixe = la zone, carré intérieur qui grandit
+        // depuis le centre ; quand il touche le contour, ça frappe. Aucun clignotement.
+        const inset = gap / 2 + cell * 0.02;
+        const size = cell - inset * 2;
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 0.1;
+        ctx.fillStyle = palette.danger;
+        ctx.beginPath();
+        ctx.roundRect(x + inset, y + inset, size, size, radius);
+        ctx.fill();
+
+        const inner = size * s.warn;
+        const off = (size - inner) / 2;
+        ctx.globalAlpha = 0.35 + 0.35 * s.warn;
+        ctx.beginPath();
+        ctx.roundRect(x + inset + off, y + inset + off, inner, inner, radius * s.warn);
+        ctx.fill();
+
+        ctx.globalAlpha = 0.85;
+        ctx.strokeStyle = palette.danger;
+        ctx.lineWidth = Math.max(1.5, cell * 0.03);
+        ctx.shadowBlur = cell * 0.15;
+        ctx.beginPath();
+        ctx.roundRect(x + inset, y + inset, size, size, radius);
         ctx.stroke();
       }
     }

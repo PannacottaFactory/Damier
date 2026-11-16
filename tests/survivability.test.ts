@@ -52,13 +52,31 @@ describe('isSurvivable', () => {
     expect(isSurvivable(seq(0.1), start, OPTS)).toBe(false);
   });
 
-  it('on ne bouge pas pendant un impact : les déplacements reprennent à sa fin', () => {
+  it('pendant un impact, on bouge mais sans traverser les cases mortelles', () => {
     const start = { x: 2, y: 2 };
-    // 1er impact long (0,5 s) ailleurs, 2e impact sur le joueur juste après.
-    const a = imp(-5, 0, row(0), 0.5);
-    const b = imp(-5, 0.55, row(2));
-    expect(isSurvivable([a, b], start, OPTS)).toBe(false); // 0,05 s libre < 0,1
-    expect(isSurvivable([a, { ...b, time: 0.6 }], start, OPTS)).toBe(true);
+    // Ligne 2 mortelle de 0 à 0,5 s (sauf la case du joueur) ; la colonne 2 tombe ensuite.
+    const a = imp(-5, 0, row(2).filter((i) => i !== idx(2, 2)), 0.5);
+    const col2 = [0, 1, 2, 3, 4].map((y) => idx(2, y));
+    // Sans la ligne, 1 déplacement latéral suffit…
+    expect(isSurvivable([imp(-5, 0.15, col2)], start, OPTS)).toBe(true);
+    // …mais la ligne bloque le chemin direct : en 1 déplacement on reste sur la colonne.
+    expect(isSurvivable([a, imp(-5, 0.15, col2)], start, OPTS)).toBe(false);
+    // Le détour (haut puis côté) prend 2 déplacements.
+    expect(isSurvivable([a, imp(-5, 0.25, col2)], start, OPTS)).toBe(true);
+  });
+
+  it('le temps restant se reporte : la pluie (une case par double croche) reste jouable', () => {
+    const start = { x: 2, y: 2 };
+    // La case du joueur puis ses voisines tombent toutes les 0,12 s, annoncées longtemps à l'avance.
+    const cells = [idx(2, 2), idx(1, 2), idx(3, 2), idx(2, 1), idx(2, 3), idx(2, 2)];
+    const rain = cells.map((c, k) => imp(-2, 0.5 + 0.12 * k, [c], 0.06));
+    expect(isSurvivable(rain, start, OPTS)).toBe(true);
+  });
+
+  it('damier alterné à chaque temps (128 BPM) : survivable', () => {
+    const beat = 60 / 128;
+    const seq = [0, 1, 2, 3].map((k) => imp((k - 2) * beat, k * beat + 1, checker((k % 2) as 0 | 1), beat / 4));
+    expect(isSurvivable(seq, { x: 2, y: 2 }, OPTS)).toBe(true);
   });
 
   it('les impacts simultanés se cumulent', () => {

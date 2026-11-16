@@ -1,7 +1,7 @@
 import type { GameState } from '../core/state';
 import type { Rng } from '../core/random';
-import { BASIC_PATTERNS } from '../patterns/library/basic';
-import { type BeatTime, PatternDirector } from '../patterns/director';
+import { LIBRARY } from '../patterns/library';
+import { type BeatTime, PatternDirector, type SectionInfo } from '../patterns/director';
 import { findHit } from './collision';
 import type { Cell, Dir } from './grid';
 import { HazardField } from './hazards';
@@ -27,8 +27,10 @@ export class GameSession {
   constructor(
     private readonly tempo: BeatTime,
     rng: Rng,
+    /** Section musicale qui jouera à un beat donné (fournie par l'audio). */
+    private readonly sectionAt: (beat: number) => SectionInfo | null,
   ) {
-    this.director = new PatternDirector(BASIC_PATTERNS, rng);
+    this.director = new PatternDirector(LIBRARY, rng);
   }
 
   /** (Re)lance une partie immédiatement. */
@@ -47,7 +49,7 @@ export class GameSession {
     if (this.state === 'PLAYING') this.player.requestMove(dir, now);
   }
 
-  update(now: number, intensity: number): void {
+  update(now: number): void {
     const beat = this.tempo.beatAt(now);
     this.player.update(now);
 
@@ -58,7 +60,7 @@ export class GameSession {
         tempo: this.tempo,
         playerCell: this.player.targetCell(),
         hazards: this.hazards,
-        intensity,
+        sectionAt: this.sectionAt,
       });
       if (pattern) this.lastPatternId = pattern.id;
 

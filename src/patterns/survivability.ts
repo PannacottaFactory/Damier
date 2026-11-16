@@ -7,8 +7,11 @@ import type { Cell } from '../game/grid';
  *
  * Modèle :
  * - Pour un impact, le joueur ne peut commencer à bouger qu'après `warnTime + reaction`
- *   (il doit avoir vu l'avertissement), et pas pendant qu'un impact précédent est en cours.
- * - Chaque déplacement coûte `moveCost` secondes (appui + tween).
+ *   (il doit avoir vu l'avertissement). S'il attend, le temps d'attente est perdu.
+ * - Chaque déplacement coûte `moveCost` secondes (appui + tween) ; le temps non utilisé
+ *   est reporté (un déplacement peut commencer pendant un impact et finir après).
+ * - On peut bouger pendant un impact, mais jamais à travers une case mortelle à ce moment-là
+ *   (approximation prudente : la case est bloquée sur tout le segment où elle est mortelle).
  * - On propage par BFS l'ensemble des cases atteignables (rester sur place est permis),
  *   puis on retire les cases qui explosent. Ensemble vide → insurvivable.
  *
@@ -51,16 +54,41 @@ export function isSurvivable(
   const n = opts.gridSize;
   const groups = groupByTime(impacts);
   let reachable = new Set<number>([playerPos.y * n + playerPos.x]);
-  /** Instant à partir duquel le joueur est libre de bouger (fin du dernier impact). */
-  let freeFrom = 0;
+  /** Instant jusqu'où le temps a déjà été compté. */
+  let clock = 0;
+  /** Temps accumulé pas encore converti en déplacement. */
+  let budget = 0;
 
-  for (const g of groups) {
-    const startMoving = Math.max(freeFrom, g.warnTime + opts.reaction);
-    const moves = Math.max(0, Math.floor((g.time - startMoving) / opts.moveCost + EPS));
-    reachable = expand(reachable, moves, n);
+  for (let gi = 0; gi < groups.length; gi++) {
+    const g = groups[gi];
+    const knowAt = g.warnTime + opts.reaction;
+    if (knowAt > clock) {
+      // Le joueur ne sait pas encore où aller : il attend, ce temps-là ne sert à rien.
+      budget = 0;
+      clock = Math.min(knowAt, g.time);
+    }
+    // Segments entre `clock` et l'impact, découpés aux fins des impacts précédents
+    // (l'ensemble des cases bloquées change à ces instants-là).
+    const cuts = groups
+      .slice(0, gi)
+      .map((h) => h.time + h.duration)
+      .filter((e) => e > clock && e < g.time);
+    for (const end of [...new Set(cuts)].sort((a, b) => a - b).concat(g.time)) {
+      budget += end - clock;
+      const moves = Math.max(0, Math.floor(budget / opts.moveCost + EPS));
+      budget -= moves * opts.moveCost;
+      if (moves > 0) {
+        const blocked = new Set<number>();
+        for (let hi = 0; hi < gi; hi++) {
+          const h = groups[hi];
+          if (h.time < end && h.time + h.duration > clock) for (const c of h.cells) blocked.add(c);
+        }
+        reachable = expand(reachable, moves, n, blocked);
+      }
+      clock = end;
+    }
     for (const c of g.cells) reachable.delete(c);
     if (reachable.size === 0) return false;
-    freeFrom = Math.max(freeFrom, g.time + g.duration);
   }
   return true;
 }
@@ -83,8 +111,8 @@ function groupByTime(impacts: readonly Impact[]): Impact[] {
   return out.map((g) => ({ ...g, cells: [...g.cells] }));
 }
 
-/** Cases atteignables en au plus `moves` déplacements orthogonaux (BFS multi-sources). */
-function expand(from: Set<number>, moves: number, n: number): Set<number> {
+/** Cases atteignables en au plus `moves` déplacements orthogonaux, sans traverser `blocked` (BFS multi-sources). */
+function expand(from: Set<number>, moves: number, n: number, blocked: ReadonlySet<number>): Set<number> {
   const seen = new Set(from);
   let frontier = [...from];
   for (let m = 0; m < moves && frontier.length > 0 && seen.size < n * n; m++) {
@@ -94,7 +122,7 @@ function expand(from: Set<number>, moves: number, n: number): Set<number> {
       const y = (c - x) / n;
       const neighbors = [x > 0 ? c - 1 : -1, x < n - 1 ? c + 1 : -1, y > 0 ? c - n : -1, y < n - 1 ? c + n : -1];
       for (const i of neighbors) {
-        if (i >= 0 && !seen.has(i)) {
+        if (i >= 0 && !seen.has(i) && !blocked.has(i)) {
           seen.add(i);
           next.push(i);
         }

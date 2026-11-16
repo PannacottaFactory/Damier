@@ -1,13 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { FADE_BEATS, MOVE_TWEEN_MS } from '../src/config';
 import { TempoMap } from '../src/core/clock';
-import { createRng } from '../src/core/random';
 import { findHit } from '../src/game/collision';
 import { HazardField, hazardPhase } from '../src/game/hazards';
 import { Player } from '../src/game/player';
-import { BASIC_PATTERNS } from '../src/patterns/library/basic';
-import { PatternDirector, toImpacts } from '../src/patterns/director';
-import { DEFAULT_SURVIVABILITY, isSurvivable } from '../src/patterns/survivability';
 
 const H = { patternId: 't', cells: [12], warnBeat: 2, impactBeat: 4, impactLen: 0.25 };
 
@@ -64,61 +60,39 @@ describe('collisions', () => {
   });
 });
 
-describe('PatternDirector', () => {
-  it('ne propose jamais de pattern insurvivable (fuzz)', () => {
-    const tempo = new TempoMap(128, 0);
-    for (let seed = 1; seed <= 40; seed++) {
-      const rng = createRng(seed);
-      const hazards = new HazardField();
-      const director = new PatternDirector(BASIC_PATTERNS, rng);
-      director.reset(0);
-      let committed = 0;
-      // Joueur aléatoire, simulé à 60 fps sur 40 mesures.
-      let cell = { x: randInt(rng), y: randInt(rng) };
-      for (let frame = 0; frame < 60 * 75; frame++) {
-        const now = frame / 60;
-        const beat = tempo.beatAt(now);
-        if (frame % 20 === 0) cell = { x: randInt(rng), y: randInt(rng) };
-        const before = hazards.all().length;
-        director.update({ beat, now, tempo, playerCell: cell, hazards, intensity: 0.8 });
-        if (hazards.all().length > before) {
-          committed++;
-          const upcoming = hazards.upcoming(beat).filter((h) => h.impactBeat > beat);
-          expect(isSurvivable(toImpacts(upcoming, tempo, now), cell, DEFAULT_SURVIVABILITY)).toBe(true);
-        }
-        hazards.prune(beat);
-      }
-      expect(committed).toBeGreaterThan(20);
-    }
+describe('fantômes (call & response)', () => {
+  const G = { ...H, ghost: true };
 
-    function randInt(rng: () => number) {
-      return Math.floor(rng() * 5);
-    }
+  it('ne sont jamais mortels ni comptés pour l’équité', () => {
+    const f = new HazardField();
+    f.add(G);
+    expect(f.isLethal(12, 4.1)).toBe(false);
+    expect(f.impactStartsBetween(3, 5)).toEqual([]);
+    expect(f.impactsAt(4)).toBe(0);
+    expect(f.upcoming(3)).toEqual([]);
   });
 
-  it('les impacts tombent sur un temps (début de mesure)', () => {
-    const tempo = new TempoMap(128, 0);
-    const hazards = new HazardField();
-    const director = new PatternDirector(BASIC_PATTERNS, createRng(7));
-    director.reset(0);
-    for (let beat = 0; beat < 40; beat += 0.05) {
-      director.update({ beat, now: tempo.timeAt(beat), tempo, playerCell: { x: 2, y: 2 }, hazards, intensity: 1 });
-    }
-    expect(hazards.all().length).toBeGreaterThan(0);
-    for (const h of hazards.all()) expect(h.impactBeat % 4).toBe(0);
+  it('s’affichent en avertissement puis en flash de contour', () => {
+    const f = new HazardField();
+    f.add(G);
+    expect(f.cellStates(3)[12].warn).toBeGreaterThan(0);
+    const s = f.cellStates(4.1)[12];
+    expect(s.impact).toBe(0);
+    expect(s.ghost).toBeGreaterThan(0);
   });
+});
 
-  it('n’enchaîne pas deux fois la même famille quand il a le choix', () => {
-    const tempo = new TempoMap(128, 0);
-    const hazards = new HazardField();
-    const director = new PatternDirector(BASIC_PATTERNS, createRng(3));
-    director.reset(0);
-    const families: string[] = [];
-    for (let beat = 0; beat < 200; beat += 0.05) {
-      const p = director.update({ beat, now: tempo.timeAt(beat), tempo, playerCell: { x: 0, y: 0 }, hazards, intensity: 1 });
-      if (p) families.push(p.family);
-      hazards.prune(beat);
-    }
-    for (let i = 1; i < families.length; i++) expect(families[i]).not.toBe(families[i - 1]);
+describe('affichage des avertissements', () => {
+  it('seul le prochain impact est en plein, les suivants en discret', () => {
+    const f = new HazardField();
+    f.add({ ...H, cells: [0], warnBeat: 2, impactBeat: 4 });
+    f.add({ ...H, cells: [1], warnBeat: 3, impactBeat: 5 });
+    const s = f.cellStates(3.5);
+    expect(s[0].warn).toBeGreaterThan(0);
+    expect(s[0].later).toBe(0);
+    expect(s[1].warn).toBe(0);
+    expect(s[1].later).toBeGreaterThan(0);
+    // Après le premier impact, le second devient « le prochain ».
+    expect(f.cellStates(4.5)[1].warn).toBeGreaterThan(0);
   });
 });

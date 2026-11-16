@@ -72,13 +72,39 @@ export const REACTION_MS = 180;
 /** Coût d'un déplacement pour un humain qui enchaîne (appui + tween), en ms. */
 export const MOVE_COST_MS = 130;
 
-// ─── Director (provisoire, enrichi à l'étape 5) ─────────────────────────────
+// ─── Director ───────────────────────────────────────────────────────────────
 
 /** Mesures de répit après un (re)départ avant le premier pattern. */
-export const FIRST_PATTERN_DELAY_BARS = 2;
+export const FIRST_PATTERN_DELAY_BARS = 1;
 
 /** On engage un pattern un peu avant le début de son avertissement, pour qu'il s'affiche pile à temps. */
 export const COMMIT_AHEAD_BEATS = 0.25;
+
+/** Une phrase musicale = 4 mesures. */
+export const BARS_PER_PHRASE = 4;
+
+/** Difficulté ajoutée à chaque rebouclage du morceau (BREAK → DROP2 → BREAK…). */
+export const LOOP_DIFFICULTY_BONUS = 0.1;
+
+/** Silence après un pattern, en temps : long quand c'est calme, quasi nul au maximum de l'intensité. */
+export const REST_BEATS_EASY = 3.5;
+export const REST_BEATS_HARD = 0.5;
+
+/**
+ * Grille des créneaux selon la difficulté : un pattern peut démarrer sur chaque temps (difficulté
+ * ≥ GRID_1_BEAT_DIFFICULTY), chaque demi-mesure (≥ GRID_2_BEATS_DIFFICULTY), sinon chaque mesure.
+ */
+export const GRID_2_BEATS_DIFFICULTY = 0.4;
+export const GRID_1_BEAT_DIFFICULTY = 0.9;
+
+/**
+ * Probabilité de jouer un gros pattern (en plusieurs temps) sur un début de mesure,
+ * interpolée selon la difficulté. Sur un début de phrase elle est plus forte, et le premier
+ * temps d'un drop en reçoit toujours un.
+ */
+export const BIG_PATTERN_CHANCE_EASY = 0.25;
+export const BIG_PATTERN_CHANCE_HARD = 0.6;
+export const BIG_PATTERN_PHRASE_BONUS = 0.3;
 
 // ─── Rendu ──────────────────────────────────────────────────────────────────
 

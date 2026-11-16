@@ -17,6 +17,8 @@ export interface Hazard {
   warnBeat: number;
   impactBeat: number;
   impactLen: number;
+  /** Fantôme (call & response) : avertissement seul, jamais mortel. */
+  ghost?: boolean;
 }
 
 export type HazardPhase = 'pending' | 'warning' | 'impact' | 'fade' | 'done';
@@ -31,8 +33,16 @@ export function hazardPhase(h: Hazard, beat: number): HazardPhase {
 
 /** État visuel d'une case, agrégé sur tous les dangers qui la concernent. */
 export interface CellDanger {
-  /** Progression de l'avertissement (0 = aucun, sinon ]0, 1], 1 = impact imminent). */
+  /**
+   * Progression de l'avertissement du PROCHAIN impact du plateau (0 = aucun, sinon ]0, 1]).
+   * Seul le prochain impact est affiché en plein : dans les patterns en plusieurs temps,
+   * le joueur voit clairement où ça tombe maintenant, et où est la case sûre.
+   */
   warn: number;
+  /** Avertissements des impacts suivants (affichés en discret). */
+  later: number;
+  /** Fantôme (call & response) : flash de contour au moment où l'impact « aurait » lieu. */
+  ghost: number;
   /** Intensité de l'explosion (1 au moment de l'impact, décroît pendant le fondu). */
   impact: number;
 }
@@ -69,44 +79,56 @@ export class HazardField {
 
   /** La case est-elle mortelle à ce beat ? */
   isLethal(cell: number, beat: number): boolean {
-    return this.hazards.some((h) => hazardPhase(h, beat) === 'impact' && h.cells.includes(cell));
+    return this.hazards.some((h) => !h.ghost && hazardPhase(h, beat) === 'impact' && h.cells.includes(cell));
   }
 
   /** Beats de début d'impact dans l'intervalle ]from, to] (pour l'échantillonnage des collisions). */
   impactStartsBetween(from: number, to: number): number[] {
     const out = new Set<number>();
-    for (const h of this.hazards) if (h.impactBeat > from && h.impactBeat <= to) out.add(h.impactBeat);
+    for (const h of this.hazards) if (!h.ghost && h.impactBeat > from && h.impactBeat <= to) out.add(h.impactBeat);
     return [...out].sort((a, b) => a - b);
   }
 
   /** Nombre de dangers dont l'impact tombe exactement sur ce beat (déclenche le son d'impact). */
   impactsAt(beat: number): number {
-    return this.hazards.filter((h) => Math.abs(h.impactBeat - beat) < BEAT_EPS).length;
+    return this.hazards.filter((h) => !h.ghost && Math.abs(h.impactBeat - beat) < BEAT_EPS).length;
   }
 
-  /** Dangers dont l'impact n'est pas encore terminé (à prendre en compte pour l'équité). */
+  /** Dangers réels dont l'impact n'est pas encore terminé (à prendre en compte pour l'équité). */
   upcoming(beat: number): Hazard[] {
-    return this.hazards.filter((h) => h.impactBeat + h.impactLen > beat);
+    return this.hazards.filter((h) => !h.ghost && h.impactBeat + h.impactLen > beat);
   }
 
   /** État visuel de chaque case (tableau à plat, GRID_SIZE²). */
   cellStates(beat: number): CellDanger[] {
-    const out: CellDanger[] = Array.from({ length: GRID_SIZE * GRID_SIZE }, () => ({ warn: 0, impact: 0 }));
+    const out: CellDanger[] = Array.from({ length: GRID_SIZE * GRID_SIZE }, () => ({
+      warn: 0,
+      later: 0,
+      ghost: 0,
+      impact: 0,
+    }));
+    // Prochain impact (réel ou fantôme) parmi les avertissements en cours.
+    let next = Infinity;
+    for (const h of this.hazards) if (hazardPhase(h, beat) === 'warning') next = Math.min(next, h.impactBeat);
+
     for (const h of this.hazards) {
       const phase = hazardPhase(h, beat);
-      let warn = 0;
-      let impact = 0;
       if (phase === 'warning') {
-        warn = Math.max(0.001, (beat - h.warnBeat) / (h.impactBeat - h.warnBeat));
-      } else if (phase === 'impact') {
-        impact = 1 - 0.25 * ((beat - h.impactBeat) / h.impactLen);
-      } else if (phase === 'fade') {
-        impact = 0.75 * (1 - (beat - h.impactBeat - h.impactLen) / FADE_BEATS);
-      } else continue;
+        const progress = Math.max(0.001, (beat - h.warnBeat) / (h.impactBeat - h.warnBeat));
+        const isNext = h.impactBeat - next < BEAT_EPS;
+        for (const c of h.cells) {
+          if (isNext) out[c].warn = Math.max(out[c].warn, progress);
+          else out[c].later = Math.max(out[c].later, progress);
+        }
+        continue;
+      }
+      let v = 0;
+      if (phase === 'impact') v = 1 - 0.25 * ((beat - h.impactBeat) / h.impactLen);
+      else if (phase === 'fade') v = 0.75 * (1 - (beat - h.impactBeat - h.impactLen) / FADE_BEATS);
+      else continue;
       for (const c of h.cells) {
-        const s = out[c];
-        s.warn = Math.max(s.warn, warn);
-        s.impact = Math.max(s.impact, impact);
+        if (h.ghost) out[c].ghost = Math.max(out[c].ghost, v);
+        else out[c].impact = Math.max(out[c].impact, v);
       }
     }
     return out;

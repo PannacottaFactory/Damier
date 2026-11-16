@@ -1,3 +1,4 @@
+import { sectionAtBeat } from './audio/arrangement';
 import { AudioEngine } from './audio/engine';
 import { LEVEL1 } from './audio/songs/level1';
 import { playImpact } from './audio/synth/impact';
@@ -12,8 +13,8 @@ import { PauseButton } from './render/pauseButton';
 import { Renderer } from './render/renderer';
 
 /**
- * Point d'entrée — étape 4 : dangers (avertissement → impact → mort), patterns simples validés
- * par isSurvivable, relance avec Espace.
+ * Point d'entrée — étape 5 : bibliothèque complète de patterns, PatternDirector lié aux sections
+ * et aux phrases musicales.
  * Tout le jeu lit le temps sur `clock` (temps audio perçu), jamais ailleurs.
  */
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -21,7 +22,11 @@ canvas.focus();
 
 const audio = new AudioEngine(LEVEL1);
 const clock = audio.clock;
-const session = new GameSession(clock.tempo, createRng(Date.now()));
+// Prévision de section : à partir de la section en cours, on déroule la structure du morceau.
+const session = new GameSession(clock.tempo, createRng(Date.now()), (beat) => {
+  const current = audio.timeline.sectionAt(clock.now());
+  return current ? sectionAtBeat(LEVEL1, current, beat) : null;
+});
 const renderer = new Renderer(canvas);
 const debug = new DebugOverlay();
 
@@ -39,6 +44,8 @@ function setPaused(paused: boolean): void {
   void audio.setPaused(paused);
   pauseButton.set(paused);
 }
+/** Debug : page de familles affichée pour les touches 1–9, 0. */
+let debugPage = 0;
 const pauseButton = new PauseButton(() => setPaused(!audio.isPaused));
 // Onglet masqué → pause automatique (on ne veut pas mourir pendant qu'on regarde ailleurs).
 document.addEventListener('visibilitychange', () => {
@@ -62,6 +69,15 @@ new Input(window, canvas, (action) => {
     // Commandes de triche : actives seulement quand l'overlay est affiché.
     else if (debug.isVisible && action.code === 'KeyN') audio.sequencer.requestSkip();
     else if (debug.isVisible && action.code === 'KeyI') session.invincible = !session.invincible;
+    else if (debug.isVisible && (action.code === 'PageDown' || action.code === 'PageUp')) {
+      const pages = Math.ceil(session.director.families.length / 10);
+      debugPage = (debugPage + (action.code === 'PageDown' ? 1 : pages - 1)) % pages;
+    } else if (debug.isVisible && /^Digit\d$/.test(action.code)) {
+      // 1–9, 0 → familles 1 à 10 de la page affichée.
+      const digit = Number(action.code.slice(5));
+      const family = session.director.families[debugPage * 10 + (digit === 0 ? 9 : digit - 1)];
+      if (family) session.director.force(family);
+    }
     return;
   }
   // Pas de déplacement tant que l'horloge audio ne tourne pas (le premier appui sert à lancer le son).
@@ -75,7 +91,7 @@ startLoop(clock, () => {
   const now = clock.now();
   const beat = clock.tempo.beatAt(now);
   const section = audio.timeline.sectionAt(now);
-  if (session.state !== 'MENU') session.update(now, section?.intensity ?? 0);
+  if (session.state !== 'MENU') session.update(now);
 
   // Pulsation : pic au moment où le kick est ENTENDU, puis décroissance exponentielle.
   // (En pause, `now` est figé : la pulsation se fige avec.)
@@ -108,6 +124,7 @@ startLoop(clock, () => {
       'Mesure.temps': `${pos.bar + 1}.${pos.beatInBar + 1}  (step ${pos.stepInBar + 1}/16)`,
       Phrase: `${pos.barInPhrase4 + 1}/4 · ${pos.barInPhrase8 + 1}/8 · ${pos.barInPhrase16 + 1}/16`,
       Pattern: session.lastPatternId ?? '—',
+      Forcé: session.director.forcedFamily ?? '—',
       Dangers: session.hazards.all().length,
       Joueur: `(${cell.x}, ${cell.y})`,
       'Latence sortie': `${((ctx.outputLatency || 0) * 1000).toFixed(1)} ms`,
@@ -115,7 +132,12 @@ startLoop(clock, () => {
       'Offset calib.': `${(clock.latencyOffset * 1000).toFixed(0)} ms`,
       'Avance audio': `${((ctx.currentTime - now) * 1000).toFixed(1)} ms`,
       '': '',
-      Touches: 'N : section suivante · I : invincible',
+      Touches: 'N : section suivante · I : invincible · 1–9, 0 : forcer · Page préc./suiv. : autres patterns',
+      ...Object.fromEntries(
+        session.director.families
+          .slice(debugPage * 10, debugPage * 10 + 10)
+          .map((f, i) => [`  ${(i + 1) % 10}`, f]),
+      ),
     };
   });
 });
