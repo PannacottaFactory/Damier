@@ -1,4 +1,5 @@
 import { AUDIO_START_DELAY_MS } from '../config';
+import { type SectionSpan, sectionAtBeat, sectionOf, SONG_START } from './arrangement';
 import { Clock } from '../core/clock';
 import { Mixer } from './mixer';
 import { Scheduler } from './scheduler';
@@ -67,6 +68,28 @@ export class AudioEngine {
       await this.ctx.resume();
       this.clock.resync();
     }
+  }
+
+  /** Relance le morceau depuis l'INTRO à la prochaine mesure (nouvelle partie). */
+  restartSong(): void {
+    this.sequencer.requestRestart();
+  }
+
+  /**
+   * Section qui jouera à un beat donné (pour le director, qui choisit ses patterns en avance).
+   * Tient compte d'une relance en attente ; null tant que la musique n'a pas commencé.
+   */
+  sectionAt(beat: number): SectionSpan | null {
+    const restart = this.sequencer.pendingRestartBeat();
+    if (restart !== null && beat >= restart) {
+      const first = sectionOf(this.song, SONG_START);
+      const span = { index: 0, name: first.name, intensity: first.intensity, bars: first.bars, loop: 0, beat: restart };
+      return sectionAtBeat(this.song, span, beat);
+    }
+    const latest = this.timeline.latestSection();
+    if (!latest) return null;
+    if (beat >= latest.beat) return sectionAtBeat(this.song, latest, beat);
+    return this.timeline.sectionAt(this.clock.tempo.timeAt(beat)) ?? latest;
   }
 
   /** Une fois par frame : recale l'horloge perçue, complète la planification, purge la timeline. */

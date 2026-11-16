@@ -1,10 +1,17 @@
 import type { BeatTime } from '../patterns/director';
 import { type Cell, cellIndex } from './grid';
-import type { HazardField } from './hazards';
+import type { Hazard, HazardField } from './hazards';
 import type { Player } from './player';
 
 /** Petite avance pour ne pas tomber du mauvais côté de la frontière d'un impact (erreur flottante). */
 const BEAT_EPS = 1e-6;
+
+export interface Hit {
+  time: number;
+  cell: Cell;
+  /** Dangers qui ont touché le joueur (pour les statistiques par pattern). */
+  hazards: Hazard[];
+}
 
 /**
  * Le joueur a-t-il été touché entre deux frames ?
@@ -20,12 +27,13 @@ export function findHit(
   fromBeat: number,
   toBeat: number,
   now: number,
-): { time: number; cell: Cell } | null {
+): Hit | null {
   const samples = hazards.impactStartsBetween(fromBeat, toBeat).map((b) => tempo.timeAt(b));
   samples.push(now);
   for (const t of samples) {
     const cell = player.cellAt(t);
-    if (hazards.isLethal(cellIndex(cell), tempo.beatAt(t) + BEAT_EPS)) return { time: t, cell };
+    const killers = hazards.lethalFor(cellIndex(cell), tempo.beatAt(t) + BEAT_EPS);
+    if (killers.length > 0) return { time: t, cell, hazards: killers };
   }
   return null;
 }

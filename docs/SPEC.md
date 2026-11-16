@@ -136,3 +136,7 @@ Avant de coder, présente-moi ton plan et l'architecture. Ensuite, implémente u
 
 ## Ajouts demandés en cours de route
 - Bouton pause (Échap / P / bouton à l'écran), pause automatique quand l'onglet est masqué — fait à l'étape 3.
+- Rangs : pas de formes géométriques façon Super Hexagon. Remplacés par PULSE → BEAT → GROOVE → RUSH → TRANSE, avec un vumètre comme icône (étape 6).
+- Avertissement des dangers : pas de clignotement ; un carré qui se remplit depuis le centre jusqu'à l'impact. Une case n'est jamais frappée plus de 2 fois par pattern (étape 5).
+- Statistiques de mort par pattern (panneau F2) pour repérer les patterns trop durs (étape 6).
+- Équité : `isSurvivable` simule un joueur humain (réaction, cadence, imprécision de timing, sans connaissance des avertissements pas encore affichés), plus exigeant dans les sections calmes (étape 6).

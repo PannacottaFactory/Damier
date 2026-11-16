@@ -23,8 +23,9 @@ function selfAvoidingPath(rng: Rng, length: number): CellXY[] | null {
 }
 
 /**
- * Case sûre qui saute : tout explose sauf une case, puis tout sauf une case voisine (à 1 ou 2 pas).
- * Deux frappes seulement : au-delà, le plateau entier clignote et ça devient illisible.
+ * Case sûre qui saute : tout explose sauf une case, puis, 2 temps plus tard, tout sauf une
+ * case voisine (à 1 ou 2 pas). Deux frappes seulement : au-delà, le plateau entier clignote.
+ * (À 1 temps d'écart, il reste à peine 0,2 s pour changer de case : trop serré.)
  */
 export const FOLLOW: PatternDef = {
   family: 'follow',
@@ -40,7 +41,7 @@ export const FOLLOW: PatternDef = {
         family: 'follow',
         steps: [
           { beatOffset: 0, cells: complement([a]) },
-          { beatOffset: 1, cells: complement([b]) },
+          { beatOffset: 2, cells: complement([b]) },
         ],
       };
     }),

@@ -13,12 +13,12 @@ export class DebugOverlay {
   private fps = 0;
   private lastPaint = 0;
 
-  constructor() {
+  constructor(side: 'left' | 'right' = 'left') {
     this.el = document.createElement('pre');
     Object.assign(this.el.style, {
       position: 'fixed',
       top: '12px',
-      left: '12px',
+      [side]: '12px',
       margin: '0',
       padding: '10px 12px',
       font: '12px/1.45 "JetBrains Mono", ui-monospace, Consolas, monospace',

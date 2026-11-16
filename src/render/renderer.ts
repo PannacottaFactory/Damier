@@ -2,7 +2,10 @@ import { BOARD_SCREEN_RATIO, BUMP_DISTANCE, GRID_SIZE, MAX_DPR, PULSE_SCALE } fr
 import { DIR_VECTORS } from '../game/grid';
 import type { CellDanger } from '../game/hazards';
 import type { PlayerView } from '../game/player';
+import type { Cell } from '../game/grid';
+import { drawShatter } from './fragments';
 import { FONT_FAMILY, type Palette, PALETTE_LEVEL1 } from './palette';
+import { type BoardLayout, type DeathView, drawDeath, drawHud, type HudView } from './ui';
 
 /** Tout ce que le rendu doit savoir pour dessiner une frame. */
 export interface FrameView {
@@ -12,12 +15,12 @@ export interface FrameView {
   /** L'audio a-t-il démarré ? (sinon : écran « appuie sur une touche »). */
   audioStarted: boolean;
   paused: boolean;
-  /** Beat courant (sert au clignotement des avertissements, calé sur la musique). */
-  beat: number;
   /** État de danger de chaque case (tableau à plat). */
   cells: readonly CellDanger[];
-  /** Mort : le joueur est affiché touché, avec l'invitation à rejouer. */
-  dead: boolean;
+  /** Chrono, score, rang (null tant qu'aucune partie n'a commencé). */
+  hud: HudView | null;
+  /** Mort : éclatement du joueur, flash, résultats. */
+  death: (DeathView & { cell: Cell; seed: number }) | null;
   invincible: boolean;
 }
 
@@ -72,27 +75,33 @@ export class Renderer {
     this.drawGrid(ox, oy, cell, view.pulse);
     this.drawHazards(view.cells, ox, oy, cell);
     this.drawBumpFlash(view.player, ox, oy, board);
-    this.drawPlayer(view.player, ox, oy, cell, view.dead, view.invincible);
+    if (view.death) {
+      const d = view.death;
+      drawShatter(ctx, ox + (d.cell.x + 0.5) * cell, oy + (d.cell.y + 0.5) * cell, cell, d.elapsed, d.seed, {
+        fill: palette.player,
+        glow: palette.danger,
+      });
+    } else {
+      this.drawPlayer(view.player, ox, oy, cell, view.invincible);
+    }
     ctx.restore();
 
+    const layout: BoardLayout = { ox, oy, cell, board, width: this.width, height: this.height };
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
-    const big = Math.round(Math.min(this.width, this.height) * 0.035);
     if (!view.audioStarted) {
+      const big = Math.round(Math.min(this.width, this.height) * 0.035);
       ctx.fillStyle = palette.text;
       ctx.font = `700 ${big}px ${FONT_FAMILY}`;
       ctx.fillText('APPUIE SUR UNE TOUCHE', this.width / 2, oy - cell * 0.6);
-    } else if (view.dead) {
-      ctx.fillStyle = palette.danger;
-      ctx.font = `800 ${big}px ${FONT_FAMILY}`;
-      ctx.fillText('TOUCHÉ', this.width / 2, oy - cell * 0.6);
-      ctx.fillStyle = palette.text;
-      ctx.font = `400 ${Math.round(big * 0.55)}px ${FONT_FAMILY}`;
-      ctx.fillText('ESPACE POUR REJOUER', this.width / 2, oy + board + cell * 0.75);
     }
+    if (view.hud && !view.death) drawHud(ctx, view.hud, layout, palette);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = palette.textDim;
     ctx.font = `400 13px ${FONT_FAMILY}`;
     ctx.fillText('FLÈCHES · ZQSD · WASD · SWIPE   —   ÉCHAP / P : PAUSE   —   F1 : DEBUG', this.width / 2, this.height - 24);
+    if (view.death) drawDeath(ctx, view.death, layout, palette);
 
     if (view.paused) this.drawPause();
   }
@@ -288,7 +297,7 @@ export class Renderer {
     ctx.restore();
   }
 
-  private drawPlayer(p: PlayerView, ox: number, oy: number, cell: number, dead: boolean, invincible: boolean): void {
+  private drawPlayer(p: PlayerView, ox: number, oy: number, cell: number, invincible: boolean): void {
     const { ctx, palette } = this;
     const cx = ox + (p.x + 0.5) * cell;
     const cy = oy + (p.y + 0.5) * cell;
@@ -312,17 +321,16 @@ export class Renderer {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(sx, sy);
-    // Mort : carré noir cerclé de rouge (l'éclatement en fragments arrive à l'étape 6).
-    ctx.shadowColor = dead ? palette.danger : palette.playerGlow;
+    ctx.shadowColor = palette.playerGlow;
     ctx.shadowBlur = cell * 0.35;
-    ctx.fillStyle = dead ? palette.bg : palette.player;
+    ctx.fillStyle = palette.player;
     ctx.beginPath();
     ctx.roundRect(-size / 2, -size / 2, size, size, size * 0.12);
     ctx.fill();
-    if (dead || invincible) {
-      ctx.strokeStyle = dead ? palette.danger : palette.playerGlow;
+    if (invincible) {
+      ctx.strokeStyle = palette.playerGlow;
       ctx.lineWidth = Math.max(2, cell * 0.04);
-      ctx.setLineDash(invincible && !dead ? [size * 0.15, size * 0.1] : []);
+      ctx.setLineDash([size * 0.15, size * 0.1]);
       ctx.stroke();
     }
     ctx.restore();

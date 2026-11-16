@@ -9,12 +9,13 @@ import { checkerCells, columnCells, range, ringCells, rowCells, sequence, spiral
  */
 
 /**
- * Espacement entre deux frappes d'un pattern qui traverse le plateau : plus serré quand ça chauffe.
- * Jamais moins d'un demi-temps : il faut pouvoir franchir la ligne juste après son passage
- * (à la double croche, l'impact dure autant que l'écart — c'est infranchissable).
+ * Espacement entre deux frappes d'un pattern qui traverse le plateau : un temps.
+ * Plus serré (demi-temps), il faut se faufiler derrière la ligne dans un trou d'environ 0,1 s :
+ * le joueur simulé (réaction, imprécision de timing) n'y arrive pas — et un humain non plus.
+ * La vitesse monte via d'autres patterns (pluie, comètes, pièces, spirale), pas en serrant les lignes.
  */
-export function spacingsFor(difficulty: number): number[] {
-  return difficulty >= 0.6 ? [1, 0.5] : [1];
+export function spacingsFor(_difficulty: number): number[] {
+  return [1];
 }
 
 /** Damier puis damier inversé, puis encore : il faut changer de case à chaque beat. */
@@ -51,22 +52,23 @@ export const SWEEP: PatternDef = {
     ),
 };
 
-/** Balayage en diagonale : les anti-diagonales tombent l'une après l'autre. */
+/** Balayage en diagonale : une bande de 2 diagonales traverse le plateau, une bande par temps. */
 export const DIAGONAL_SWEEP: PatternDef = {
   family: 'diagonal-sweep',
   minIntensity: 0.4,
   big: true,
-  // Une diagonale par demi-temps : plus serré, on ne peut plus passer derrière.
   variants: () =>
     symmetries(
       sequence(
         'diag',
         'diagonal-sweep',
-        range(9).map((k) => ({
-          beatOffset: k * 0.5,
-          cells: range(5)
-            .map((x) => [x, k - x] as const)
-            .filter(([, y]) => y >= 0 && y < 5),
+        range(5).map((k) => ({
+          beatOffset: k,
+          cells: [2 * k, 2 * k + 1].flatMap((d) =>
+            range(5)
+              .map((x) => [x, d - x] as const)
+              .filter(([, y]) => y >= 0 && y < 5),
+          ),
         })),
       ),
     ),

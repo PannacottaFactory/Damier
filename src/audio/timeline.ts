@@ -57,6 +57,11 @@ export class EventTimeline {
     return null;
   }
 
+  /** Dernière section planifiée (éventuellement pas encore audible). */
+  latestSection(): SectionEvent | null {
+    return this.sections[this.sections.length - 1] ?? null;
+  }
+
   /** Purge des vieux événements (on garde toujours la section en cours). */
   prune(now: number): void {
     const limit = now - KEEP_SECONDS;

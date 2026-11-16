@@ -40,6 +40,9 @@ export class Sequencer {
   private pos: SongPosition = SONG_START;
   private started = false;
   private skipRequested = false;
+  private restartRequested = false;
+  /** Dernier step planifié (sert à prévoir où tombera la prochaine mesure). */
+  private lastStep = -1;
   private readonly hats: Hats;
   private riser: AudioBufferSourceNode | null = null;
 
@@ -64,6 +67,17 @@ export class Sequencer {
     this.skipRequested = false;
   }
 
+  /** Relance le morceau depuis son début (INTRO) à la prochaine mesure. */
+  requestRestart(): void {
+    this.restartRequested = true;
+  }
+
+  /** Beat où le morceau redémarrera si une relance est en attente (sinon null). */
+  pendingRestartBeat(): number | null {
+    if (!this.restartRequested) return null;
+    return (Math.ceil((this.lastStep + 1) / STEPS_PER_BAR) * STEPS_PER_BAR) / STEPS_PER_BEAT;
+  }
+
   /** Debug : passe à la section suivante à la prochaine mesure. */
   requestSkip(): void {
     this.skipRequested = true;
@@ -74,6 +88,7 @@ export class Sequencer {
   }
 
   playStep(step: number, time: number): void {
+    this.lastStep = step;
     const stepInBar = step % STEPS_PER_BAR;
     if (stepInBar === 0) this.onBarStart(step, time);
     if (!this.started) return;
@@ -124,14 +139,16 @@ export class Sequencer {
 
   /** Début de mesure : avance dans l'arrangement et planifie les automations de la mesure. */
   private onBarStart(step: number, time: number): void {
-    if (!this.started) {
+    // Un saut (debug) ou une relance interrompt la section en cours : riser orphelin à couper.
+    const wasSkip = this.skipRequested || (this.restartRequested && this.started);
+    if (!this.started || this.restartRequested) {
       this.started = true;
       this.pos = SONG_START;
     } else {
       this.pos = this.skipRequested ? nextSectionStart(this.song, this.pos) : advanceBar(this.song, this.pos);
     }
-    const wasSkip = this.skipRequested;
     this.skipRequested = false;
+    this.restartRequested = false;
 
     const sec = sectionOf(this.song, this.pos);
     const bar = this.pos.barInSection;

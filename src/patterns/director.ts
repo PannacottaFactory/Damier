@@ -19,7 +19,7 @@ import {
 import { type Rng, shuffled } from '../core/random';
 import type { Cell } from '../game/grid';
 import type { Hazard, HazardField } from '../game/hazards';
-import { DEFAULT_SURVIVABILITY, type Impact, isSurvivable, type SurvivabilityOptions } from './survivability';
+import { humanModel, type Impact, isSurvivable, type SurvivabilityOptions } from './survivability';
 import { type Pattern, type PatternDef, patternLength } from './types';
 
 /** Conversion temps ↔ beats (implémentée par TempoMap). */
@@ -52,6 +52,7 @@ export type HazardSpec = Omit<Hazard, 'id'>;
 export function instantiate(pattern: Pattern, startBeat: number, warnBeats: number): HazardSpec[] {
   return pattern.steps.map((s) => ({
     patternId: pattern.id,
+    family: pattern.family,
     cells: s.cells.map(([x, y]) => y * GRID_SIZE + x),
     warnBeat: startBeat + s.beatOffset - warnBeats,
     impactBeat: startBeat + s.beatOffset,
@@ -93,7 +94,8 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * Math.min(1, Math
  * - Filtre par difficulté minimale et par section (la pluie : seulement dans les drops).
  * - Jamais deux fois la même famille d'affilée (sauf s'il n'y a pas d'autre choix).
  * - Chaque candidat est validé par isSurvivable AVEC les dangers déjà en vol, depuis
- *   la position réelle du joueur, au moment où son avertissement apparaît.
+ *   la position réelle du joueur, au moment où son avertissement apparaît, avec un joueur
+ *   simulé d'autant plus lent que la section est calme.
  */
 export class PatternDirector {
   private nextSlot = Infinity;
@@ -104,7 +106,8 @@ export class PatternDirector {
     private readonly library: readonly PatternDef[],
     private readonly rng: Rng,
     private readonly warnBeats = WARN_BEATS,
-    private readonly fairness: SurvivabilityOptions = DEFAULT_SURVIVABILITY,
+    /** Modèle humain imposé (tests) ; par défaut il dépend de la difficulté de la section. */
+    private readonly fairness?: SurvivabilityOptions,
   ) {}
 
   /** Familles dans l'ordre de la bibliothèque (touches de debug). */
@@ -191,12 +194,13 @@ export class PatternDirector {
 
   private place(slot: number, sec: SectionInfo, difficulty: number, ctx: DirectorContext): Pattern | null {
     const existing: HazardSpec[] = ctx.hazards.upcoming(ctx.beat).filter((h) => h.impactBeat > ctx.beat);
+    const human = this.fairness ?? humanModel(difficulty);
 
     for (const def of this.candidates(slot, sec, difficulty)) {
       for (const pattern of shuffled(this.rng, def.variants(this.rng, difficulty))) {
         const specs = instantiate(pattern, slot, this.warnBeats);
         const impacts = toImpacts([...existing, ...specs], ctx.tempo, ctx.now);
-        if (!isSurvivable(impacts, ctx.playerCell, this.fairness)) continue;
+        if (!isSurvivable(impacts, ctx.playerCell, human)) continue;
         for (const s of specs) ctx.hazards.add(s);
         this.lastFamily = def.family;
         return pattern;

@@ -59,8 +59,8 @@ export const MOVING_CROSS: PatternDef = {
 };
 
 /**
- * Double ligne (« train ») qui avance d'une ligne par temps. Pour la franchir il faut traverser
- * 2 lignes entre deux frappes : un temps entier est nécessaire.
+ * Train : une bande de 2 lignes qui traverse le plateau, 2 lignes par temps.
+ * (Avancer d'une seule ligne par temps obligerait à traverser la bande entre deux frappes.)
  */
 export const TRAIN: PatternDef = {
   family: 'train',
@@ -71,7 +71,7 @@ export const TRAIN: PatternDef = {
       sequence(
         'train',
         'train',
-        range(4).map((k) => ({ beatOffset: k, cells: [...rowCells(k), ...rowCells(k + 1)] })),
+        [[0, 1], [2, 3], [4]].map((rows, k) => ({ beatOffset: k, cells: rows.flatMap(rowCells) })),
       ),
     ),
 };

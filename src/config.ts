@@ -64,21 +64,32 @@ export const IMPACT_BEATS = 0.25;
 /** Durée du fondu après l'impact (purement visuel, inoffensif). */
 export const FADE_BEATS = 0.5;
 
-// ─── Équité (modèle du joueur humain utilisé par isSurvivable) ──────────────
+// ─── Équité (joueur humain simulé par isSurvivable) ─────────────────────────
+// Deux profils, interpolés selon la difficulté de la section : « EASY » = joueur posé
+// (seuls les patterns confortables passent), « HARD » = joueur vif (drops).
 
-/** Temps de réaction : délai entre l'apparition d'un avertissement et le premier déplacement possible. */
-export const REACTION_MS = 180;
+/** Délai entre l'apparition d'un avertissement et le premier déplacement en réponse. */
+export const HUMAN_REACTION_MS_EASY = 380;
+export const HUMAN_REACTION_MS_HARD = 270;
 
-/** Coût d'un déplacement pour un humain qui enchaîne (appui + tween), en ms. */
-export const MOVE_COST_MS = 130;
+/** Temps entre deux déplacements enchaînés (appui + tween + décision). */
+export const HUMAN_MOVE_MS_EASY = 230;
+export const HUMAN_MOVE_MS_HARD = 170;
+
+/** Imprécision de timing : on n'exige jamais de passer dans un trou plus serré que ça autour d'un impact. */
+export const HUMAN_TIMING_MS_EASY = 90;
+export const HUMAN_TIMING_MS_HARD = 60;
 
 // ─── Director ───────────────────────────────────────────────────────────────
 
 /** Mesures de répit après un (re)départ avant le premier pattern. */
 export const FIRST_PATTERN_DELAY_BARS = 1;
 
-/** On engage un pattern un peu avant le début de son avertissement, pour qu'il s'affiche pile à temps. */
-export const COMMIT_AHEAD_BEATS = 0.25;
+/**
+ * On engage un pattern juste avant le début de son avertissement (environ une frame) :
+ * il est validé depuis la position du joueur au moment où il le voit apparaître.
+ */
+export const COMMIT_AHEAD_BEATS = 0.06;
 
 /** Une phrase musicale = 4 mesures. */
 export const BARS_PER_PHRASE = 4;
@@ -105,6 +116,41 @@ export const GRID_1_BEAT_DIFFICULTY = 0.9;
 export const BIG_PATTERN_CHANCE_EASY = 0.25;
 export const BIG_PATTERN_CHANCE_HARD = 0.6;
 export const BIG_PATTERN_PHRASE_BONUS = 0.3;
+
+// ─── Mort et relance ────────────────────────────────────────────────────────
+
+/** Gel de l'image au moment de la mort (l'impact « s'imprime »). */
+export const DEATH_FREEZE_MS = 150;
+
+/** Durée du flash blanc de la mort. */
+export const DEATH_FLASH_MS = 260;
+
+/** Délai avant qu'Espace puisse relancer (évite de relancer sans avoir vu ce qui nous a tués). */
+export const RESTART_LOCK_MS = 250;
+
+/** Fréquence du passe-bas master à la mort (la musique est « étouffée »). */
+export const DEATH_MUFFLE_HZ = 380;
+
+// ─── Score et progression ───────────────────────────────────────────────────
+
+/** Points par seconde de survie. */
+export const SCORE_PER_SECOND = 100;
+
+/** Bonus « near miss » : une case explose alors qu'on vient de la quitter. */
+export const NEAR_MISS_POINTS = 250;
+
+/** On a « frôlé » une case si on l'occupait encore il y a moins de ça au moment de son impact. */
+export const NEAR_MISS_WINDOW_MS = 250;
+
+/**
+ * Rangs affichés en cours de partie, un nouveau toutes les RANK_INTERVAL_S secondes.
+ * Thème musical : on monte en intensité jusqu'à la transe (icône : un vumètre qui s'allume).
+ */
+export const RANKS = ['PULSE', 'BEAT', 'GROOVE', 'RUSH', 'TRANSE'] as const;
+export const RANK_INTERVAL_S = 10;
+
+/** Le niveau suivant se débloque en tenant ce temps au niveau précédent. */
+export const UNLOCK_SECONDS = 60;
 
 // ─── Rendu ──────────────────────────────────────────────────────────────────
 

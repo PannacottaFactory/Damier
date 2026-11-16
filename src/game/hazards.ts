@@ -12,6 +12,8 @@ import { FADE_BEATS, GRID_SIZE } from '../config';
 export interface Hazard {
   id: number;
   patternId: string;
+  /** Famille du pattern d'origine (statistiques de mort). */
+  family: string;
   /** Index des cases (y * GRID_SIZE + x). */
   cells: readonly number[];
   warnBeat: number;
@@ -80,6 +82,16 @@ export class HazardField {
   /** La case est-elle mortelle à ce beat ? */
   isLethal(cell: number, beat: number): boolean {
     return this.hazards.some((h) => !h.ghost && hazardPhase(h, beat) === 'impact' && h.cells.includes(cell));
+  }
+
+  /** Dangers réels mortels pour cette case à ce beat (ceux qui tuent). */
+  lethalFor(cell: number, beat: number): Hazard[] {
+    return this.hazards.filter((h) => !h.ghost && hazardPhase(h, beat) === 'impact' && h.cells.includes(cell));
+  }
+
+  /** Dangers réels dont l'impact commence dans ]from, to] (near misses). */
+  startingBetween(from: number, to: number): Hazard[] {
+    return this.hazards.filter((h) => !h.ghost && h.impactBeat > from && h.impactBeat <= to);
   }
 
   /** Beats de début d'impact dans l'intervalle ]from, to] (pour l'échantillonnage des collisions). */

@@ -5,7 +5,7 @@ import { findHit } from '../src/game/collision';
 import { HazardField, hazardPhase } from '../src/game/hazards';
 import { Player } from '../src/game/player';
 
-const H = { patternId: 't', cells: [12], warnBeat: 2, impactBeat: 4, impactLen: 0.25 };
+const H = { patternId: 't', family: 't', cells: [12], warnBeat: 2, impactBeat: 4, impactLen: 0.25 };
 
 describe('cycle d’un danger', () => {
   it('pending → warning → impact → fade → done', () => {

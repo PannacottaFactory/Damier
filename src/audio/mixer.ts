@@ -1,3 +1,5 @@
+import { DEATH_MUFFLE_HZ } from '../config';
+
 /**
  * Graphe de mixage :
  *
@@ -82,6 +84,14 @@ export class Mixer {
     const g = this.sidechain.gain;
     g.setTargetAtTime(1 - 0.75 * velocity, time, 0.003);
     g.setTargetAtTime(1, time + 0.045, 0.07);
+  }
+
+  /** Mort : tout le mix passe derrière un passe-bas (musique « étouffée ») ; relance : on rouvre. */
+  muffle(on: boolean, time: number): void {
+    const f = this.masterFilter.frequency;
+    f.cancelScheduledValues(time);
+    f.setValueAtTime(f.value, time);
+    f.setTargetAtTime(on ? DEATH_MUFFLE_HZ : 20000, time, on ? 0.07 : 0.04);
   }
 
   /** Automation du filtre de la musique entre deux dates (interpolation exponentielle). */

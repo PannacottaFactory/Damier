@@ -5,7 +5,7 @@ import { createRng } from '../src/core/random';
 import { instantiate, toImpacts } from '../src/patterns/director';
 import { LIBRARY } from '../src/patterns/library';
 import { spiralOrder } from '../src/patterns/library/shapes';
-import { isSurvivable } from '../src/patterns/survivability';
+import { humanModel, isSurvivable } from '../src/patterns/survivability';
 import {
   callAndResponse,
   complement,
@@ -140,12 +140,14 @@ describe('bibliothèque', () => {
                   expect(x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE, `${p.id} : (${x}, ${y})`).toBe(true);
                 }
               }
-              // Joué seul au niveau 1 : survivable depuis au moins une case de départ.
+              // Joué seul au niveau 1, par le joueur simulé de cette difficulté :
+              // survivable depuis au moins une case de départ.
+              const human = humanModel(difficulty);
               const impacts = toImpacts(instantiate(p, START, 2), tempo, 0);
               let any = false;
-              for (let i = 0; i < 25 && !any; i++) any = isSurvivable(impacts, { x: i % 5, y: Math.floor(i / 5) });
+              for (let i = 0; i < 25 && !any; i++) any = isSurvivable(impacts, { x: i % 5, y: Math.floor(i / 5) }, human);
               expect(any, `${p.id} : survivable depuis au moins une case`).toBe(true);
-              if (isSurvivable(impacts, { x: 2, y: 2 })) fromCenter++;
+              if (isSurvivable(impacts, { x: 2, y: 2 }, human)) fromCenter++;
             }
             expect(fromCenter, 'au moins une variante jouable depuis le centre').toBeGreaterThan(0);
           }

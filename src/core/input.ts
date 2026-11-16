@@ -28,7 +28,7 @@ const KEY_TO_DIR: Record<string, Dir> = {
 };
 
 /** Touches dont on bloque le comportement par défaut du navigateur (scroll, aide…). */
-const PREVENT_DEFAULT = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'F1', 'PageUp', 'PageDown']);
+const PREVENT_DEFAULT = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'F1', 'F2', 'PageUp', 'PageDown']);
 
 export class Input {
   private readonly ac = new AbortController();
